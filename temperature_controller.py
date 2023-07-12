@@ -9,10 +9,13 @@ _g            = _egg.gui
 _serial_tools = _mc.instruments._serial_tools
 
 from serial.tools.list_ports import comports as _comports
-import arduino_api
+from _arduino_api import arduino_api
 
 # GUI settings
 _s.settings['dark_theme_qt'] = True
+
+# Print data to terminal for debugging
+_debug = True
 
 
 class serial_gui_base(_g.BaseObject):
@@ -186,6 +189,9 @@ class serial_gui_base(_g.BaseObject):
                     address=self.number_address.get_value(),
                     baudrate=int(self.combo_baudrates.get_text()),
                     timeout=self.number_timeout.get_value())
+            
+            # Delay to give the Arduino time to run setup
+            _time.sleep(2)
 
             # Record the time if it's not already there.
             if self.t0 is None: self.t0 = _time.time()
@@ -316,12 +322,20 @@ class temperature_controller(serial_gui_base):
         self.window.show(block)
     
     def _after_button_connect_toggled(self):
-        if not self.button_connect.is_checked():
-            self._button_start.enable()
-            self.timer.stop()
-    
-    def _button_start_toggled(self):
         
+        if self.button_connect.is_checked():
+            
+            self._set_channel_status('Connected')
+            
+            self._send_parameters()
+
+            self.timer.start()
+        
+        else:
+            self._set_channel_status('Disconnected')
+            self.timer.stop()       
+            
+    def _send_parameters(self):
         delim = ','
         msg = ''
         msg += str(int(self.number_setpoint_0      .get_value()*4))       + delim
@@ -334,9 +348,37 @@ class temperature_controller(serial_gui_base):
         msg += str(int(round(self.number_integral_1.get_value()*1000*4))) + delim
         msg += str(int(round(self.number_rate_1    .get_value()*100)))    + delim
         
-        self._button_start.disable()
+        #print(msg)
         self.api.write(msg)
-        self.timer.start()
+    
+    def _set_channel_status(self, _status):
+        if _status == 'Connected':
+            self.channel_0_status.set_text('(Connected)').set_style('font-size: 20pt; color: mediumspringgreen')
+            self.channel_1_status.set_text('(Connected)').set_style('font-size: 20pt; color: mediumspringgreen')
+        else:
+            self.channel_0_status.set_text('(Disconnected)').set_style('font-size: 20pt; color: coral')
+            self.channel_0_status.set_text('(Disconnected)').set_style('font-size: 20pt; color: coral')
+
+    def _timer_tick(self):
+        t = _time.time()-self.t0
+        
+        packet = self.api.read_all()
+        data = packet.split('\r\n')[:-1] 
+        if(_debug): print(data)
+        
+        try:
+            t0, output0, proportional0, integral0, t1, output1, proportional1, integral1, Tsample = data
+            
+            self.number_temperature_0.set_value(float(t0))
+            self.number_temperature_1.set_value(float(t1))
+        
+            self.plot_0.append_row([t, float(t0), float(output0), float(proportional0), float(integral0)], ckeys=['Time (s)', 'Temperature (C)', 'Output (%)', 'Proportional', 'Integral'])
+            self.plot_0.plot()
+            
+            self.plot_1.append_row([t, float(t1), float(output1), float(proportional1), float(integral1)], ckeys=['Time (s)', 'Temperature (C)', 'Output (%)', 'Proportional', 'Integral'])
+            self.plot_1.plot()
+        except:
+            return
     
     def setup_gui_components(self, name, temperature_limit):
         # Remember the limit
@@ -346,9 +388,6 @@ class temperature_controller(serial_gui_base):
         _serial_tools.serial_gui_base.__init__(self, api_class=arduino_api, name=name, show=False, window_size=[1000,800])
         
         self.window.set_size([0,0])
-        
-        self._button_start = self.grid_bot.add(_g.Button('Start', checkable=True))
-        self._button_start.signal_toggled.connect(self._button_start_toggled)
         
         self.grid_bot.new_autorow()
         
@@ -368,39 +407,39 @@ class temperature_controller(serial_gui_base):
         t01.add(_g.Label('Temperature:'), alignment=2).set_style('font-size: 15pt; font-weight: bold; color: white')
         self.number_temperature_0 = t01.add(_g.NumberBox(
             -273.16, bounds=(-273.16, temperature_limit), suffix='°C',
-            signal_changed=self._number_setpoint_changed
+            signal_changed=self._send_parameters
             )).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' )
         t01.new_autorow()
         
         t01.add(_g.Label('Setpoint:'), alignment=2).set_style('font-size: 15pt; font-weight: bold; color: cyan' )
         self.number_setpoint_0 = t01.add(_g.NumberBox(
             25.4, bounds=(0, temperature_limit), suffix='°C',
-            signal_changed=self._number_setpoint_changed
+            signal_changed=self._send_parameters
             )).set_width(200).set_style('font-size: 15pt; color: cyan').enable()
         
         t02.new_autorow()
         t02.add(_g.Label('Band:'), alignment=2).set_style('font-size: 15pt; color: paleturquoise')
         self.number_band_0 = t02.add(_g.NumberBox(
             5, bounds=(0, 1000), suffix='°C',
-            signal_changed=self._number_setpoint_changed
+            signal_changed=self._send_parameters
             )).set_width(200).set_style('font-size: 15pt; color: paleturquoise').enable()
 
         t02.new_autorow()
-        t02.add(_g.Label('Integral time:'), alignment=2).set_style('font-size: 15pt; color: mediumspringgreen')
+        t02.add(_g.Label('Integral time:'), alignment=2).set_style('font-size: 15pt; color: gold')
         self.number_integral_0 = t02.add(_g.NumberBox(
             30, bounds=(0, 1000), suffix='s',
-            signal_changed=self._number_setpoint_changed
-            )).set_width(200).set_style('font-size: 15pt; color: mediumspringgreen').enable()
+            signal_changed=self._send_parameters
+            )).set_width(200).set_style('font-size: 15pt; color: gold').enable()
         
         t02.new_autorow()
         t02.add(_g.Label('Ramp rate:'), alignment=2).set_style('font-size: 15pt; color: pink')
         self.number_rate_0 = t02.add(_g.NumberBox(
             0.1, bounds=(0, 1000), suffix='s⁻¹',
-            signal_changed=self._number_setpoint_changed
+            signal_changed=self._send_parameters
             )).set_width(200).set_style('font-size: 15pt; color: pink').enable()
         
         t03.add(_g.Label('Channel 0'), alignment=0, column=0, row=0).set_style('font-size: 20pt; color: royalblue')
-        t03.add(_g.Label('(Idle)')   , alignment=0, column=0, row=1).set_style('font-size: 20pt; color: grey')
+        self.channel_0_status = t03.add(_g.Label('(Disconnected)'), alignment=0, column=0, row=1).set_style('font-size: 20pt; color: coral')
 
         # Make the Channel 0 plotter.
         self.plot_0 = t04.add(_g.DataboxPlot(
@@ -417,39 +456,39 @@ class temperature_controller(serial_gui_base):
         t11.add(_g.Label('Temperature:'), alignment=2).set_style('font-size: 15pt; font-weight: bold; color: white')
         self.number_temperature_1 = t11.add(_g.NumberBox(
             -273.16, bounds=(-273.16, temperature_limit), suffix='°C',
-            signal_changed=self._number_setpoint_changed
+            signal_changed=self._send_parameters
             )).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' )
         t11.new_autorow()
         
         t11.add(_g.Label('Setpoint:'), alignment=2).set_style('font-size: 15pt; font-weight: bold; color: cyan' )
         self.number_setpoint_1 = t11.add(_g.NumberBox(
             25.4, bounds=(0, temperature_limit), suffix='°C',
-            signal_changed=self._number_setpoint_changed
+            signal_changed=self._send_parameters
             )).set_width(200).set_style('font-size: 15pt; color: cyan').enable()
         
         t12.new_autorow()
         t12.add(_g.Label('Band:'), alignment=2).set_style('font-size: 15pt; color: paleturquoise')
         self.number_band_1 = t12.add(_g.NumberBox(
             5, bounds=(0, 1000), suffix='°C',
-            signal_changed=self._number_setpoint_changed
+            signal_changed=self._send_parameters
             )).set_width(200).set_style('font-size: 15pt; color: paleturquoise').enable()
 
         t12.new_autorow()
-        t12.add(_g.Label('Integral time:'), alignment=2).set_style('font-size: 15pt; color: mediumspringgreen')
+        t12.add(_g.Label('Integral time:'), alignment=2).set_style('font-size: 15pt; color: gold')
         self.number_integral_1 = t12.add(_g.NumberBox(
             30, bounds=(0, 1000), suffix='s',
-            signal_changed=self._number_setpoint_changed
-            )).set_width(200).set_style('font-size: 15pt; color: mediumspringgreen').enable()
+            signal_changed=self._send_parameters
+            )).set_width(200).set_style('font-size: 15pt; color: gold').enable()
         
         t12.new_autorow()
         t12.add(_g.Label('Ramp rate:'), alignment=2).set_style('font-size: 15pt; color: pink')
         self.number_rate_1 = t12.add(_g.NumberBox(
             0.1, bounds=(0, 1000), suffix='s⁻¹',
-            signal_changed=self._number_setpoint_changed
+            signal_changed=self._send_parameters
             )).set_width(200).set_style('font-size: 15pt; color: pink').enable()
         
-        t13.add(_g.Label('Channel 1'), alignment=0, column=0, row=0).set_style('font-size: 20pt; color: lightcoral')
-        t13.add(_g.Label('(Idle)')   , alignment=0, column=0, row=1).set_style('font-size: 20pt; color: grey')
+        t13.add(_g.Label('Channel 1'), alignment=0, column=0, row=0).set_style('font-size: 20pt; color: fuchsia')
+        self.channel_1_status = t13.add(_g.Label('(Disconnected)')   , alignment=0, column=0, row=1).set_style('font-size: 20pt; color: coral')
 
         # Make the Channel 0 plotter.
         self.plot_1 = t14.add(_g.DataboxPlot(
@@ -464,32 +503,7 @@ class temperature_controller(serial_gui_base):
         # Bottom log file controls
         self.grid_bot.new_autorow()
 
-        return
+        return    
 
-    def _number_setpoint_changed(self):
-        return
 
-    def _timer_tick(self):
-        t = _time.time()-self.t0
-        
-        packet = self.api.read_all()
-        data = packet.split('\r\n')[:-1] 
-        print(data)
-        
-        try:
-            t0, output0, band0, integral0, t1, output1, band1, integral1, Tsample = data
-            
-            self.number_temperature_0.set_value(float(t0))
-            self.number_temperature_1.set_value(float(t1))
-        
-            self.plot_0.append_row([t, float(t0), float(output0)], ckeys=['Time (s)', 'Temperature (C)', 'Output (%)'])
-            self.plot_0.plot()
-            
-            self.plot_1.append_row([t, float(t1), float(output1)], ckeys=['Time (s)', 'Temperature (C)', 'Output (%)'])
-            self.plot_1.plot()
-        except:
-            return
-        
-        return 
-    
 self = temperature_controller('Dominic`s Controller')
