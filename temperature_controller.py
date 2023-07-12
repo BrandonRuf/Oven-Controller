@@ -358,7 +358,8 @@ class temperature_controller(serial_gui_base):
         else:
             self.channel_0_status.set_text('(Disconnected)').set_style('font-size: 20pt; color: coral')
             self.channel_0_status.set_text('(Disconnected)').set_style('font-size: 20pt; color: coral')
-
+            
+    
     def _timer_tick(self):
         t = _time.time()-self.t0
         
@@ -367,16 +368,20 @@ class temperature_controller(serial_gui_base):
         if(_debug): print(data)
         
         try:
-            t0, output0, proportional0, integral0, t1, output1, proportional1, integral1, Tsample = data
+            T0, output0, proportional0, integral0, T1, output1, proportional1, integral1, Tsample = data
             
-            self.number_temperature_0.set_value(float(t0))
-            self.number_temperature_1.set_value(float(t1))
+            self.number_temperature_0     .set_value(float(T0))
+            self.number_temperature_1     .set_value(float(T1))
+            self.number_temperature_sample.set_value(float(Tsample))
         
-            self.plot_0.append_row([t, float(t0), float(output0), float(proportional0), float(integral0)], ckeys=['Time (s)', 'Temperature (C)', 'Output (%)', 'Proportional', 'Integral'])
+            self.plot_0.append_row([t, float(T0), float(output0), float(proportional0), float(integral0)], ckeys=['Time (s)', 'Temperature (C)', 'Output (%)', 'Proportional', 'Integral'])
             self.plot_0.plot()
             
-            self.plot_1.append_row([t, float(t1), float(output1), float(proportional1), float(integral1)], ckeys=['Time (s)', 'Temperature (C)', 'Output (%)', 'Proportional', 'Integral'])
+            self.plot_1.append_row([t, float(T1), float(output1), float(proportional1), float(integral1)], ckeys=['Time (s)', 'Temperature (C)', 'Output (%)', 'Proportional', 'Integral'])
             self.plot_1.plot()
+            
+            self.plot_sample.append_row([t, float(Tsample)], ckeys=['Time (s)', 'Temperature (C)'])
+            self.plot_sample.plot()
         except:
             return
     
@@ -395,8 +400,9 @@ class temperature_controller(serial_gui_base):
         self.tabs = self.grid_bot.add(_g.TabArea(self.name+'.tabs'), alignment=0,column_span=10)
         
         # Create main tab
-        self.tab_channel_0  = self.tabs.add_tab('Channel 0')
-        self.tab_channel_1  = self.tabs.add_tab('Channel 1')
+        self.tab_channel_0       = self.tabs.add_tab('Channel 0')
+        self.tab_channel_1       = self.tabs.add_tab('Channel 1')
+        self.tab_channel_sample  = self.tabs.add_tab('Sample')
         
         # Channel 0 tab segmentation
         t01 = self.tab_channel_0.place_object(_g.GridLayout(margins=False), alignment=0, row=1,column=0)
@@ -492,6 +498,22 @@ class temperature_controller(serial_gui_base):
 
         # Make the Channel 0 plotter.
         self.plot_1 = t14.add(_g.DataboxPlot(
+            file_type='*.csv',
+            autosettings_path=name+'.plot',
+            delimiter=',', show_logger=True), alignment=0, column_span=10)
+        
+        tS1 = self.tab_channel_sample.place_object(_g.GridLayout(margins=False), alignment=0, row=0, column =0)
+        tS2 = self.tab_channel_sample.place_object(_g.GridLayout(margins=False), alignment=0, row=1, column = 0,column_span=10)
+        
+        tS1.add(_g.Label('Sample Temperature:'), alignment=1).set_style('font-size: 15pt; font-weight: bold; color: white')
+        self.number_temperature_sample = tS1.add(_g.NumberBox(
+            -273.16, bounds=(-273.16, temperature_limit), suffix='°C',
+            signal_changed=self._send_parameters
+            )).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' )
+        
+        
+        # Make the Sample Channel plotter.
+        self.plot_sample = tS2.add(_g.DataboxPlot(
             file_type='*.csv',
             autosettings_path=name+'.plot',
             delimiter=',', show_logger=True), alignment=0, column_span=10)
