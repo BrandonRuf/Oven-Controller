@@ -65,6 +65,7 @@ class serial_gui_base(_g.BaseObject):
         # Top of GUI (Serial Communications)
         self.grid_top = self.window.place_object(_g.GridLayout(margins=False), alignment=0)
         self.window.new_autorow()
+        self.grid_bot = self.window.place_object(_g.GridLayout(margins=False), alignment=0)
 
         # Get all the available ports
         self._label_port = self.grid_top.add(_g.Label('Port:'))
@@ -94,8 +95,8 @@ class serial_gui_base(_g.BaseObject):
 
         self.grid_top.add(_g.Label('Baud:'))
         self.combo_baudrates = self.grid_top.add(_g.ComboBox(
-            ['1200', '2400', '4800', '9600', '19200'],
-            default_index=3,
+            ['1200', '2400', '4800', '9600', '19200', '115200'],
+            default_index=5,
             autosettings_path=name+'.combo_baudrates'))
 
         self.grid_top.add(_g.Label('Timeout:'))
@@ -119,6 +120,9 @@ class serial_gui_base(_g.BaseObject):
         # Error
         self.grid_top.new_autorow()
         self.label_message = self.grid_top.add(_g.Label(''), column_span=10).set_colors('pink' if _s.settings['dark_theme_qt'] else 'red')
+        
+        # By default the bottom grid is disabled
+        self.grid_bot.disable()
 
         # Other data
         self.t0 = None
@@ -133,6 +137,7 @@ class serial_gui_base(_g.BaseObject):
         """
         Refreshes the list of availible serial ports in the GUI.
         """
+        
         if self.get_selected_port() == 'Refresh - Update Ports List':
             
             len_ports = len(self.combo_ports.get_all_items())
@@ -316,6 +321,7 @@ class temperature_controller(serial_gui_base):
         # Run the base class stuff, which shows the window at the end.
         serial_gui_base.__init__(self, api_class=arduino_api, name=name, show=False, window_size=window_size)
         
+        # Populate the GUI with all the goods
         self.setup_gui_components(name, temperature_limit)
         
         # Finally show it.
@@ -325,31 +331,43 @@ class temperature_controller(serial_gui_base):
         
         if self.button_connect.is_checked():
             
+            # Indicate channel status in the GUI            
             self._set_channel_status('Connected')
             
+            # Send the PID parameters to the arduino
             self._send_parameters()
 
+            # Start the GUI timer
             self.timer.start()
         
         else:
+            # Indicate channel status in the GUI  
             self._set_channel_status('Disconnected')
+            
+            # Stop GUI timer
             self.timer.stop()       
             
     def _send_parameters(self):
         delim = ','
+        
+        # Build up the message to send to the controller
         msg = ''
         msg += str(int(self.number_setpoint_0      .get_value()*4))       + delim
         msg += str(int(round(self.number_band_0    .get_value()*4)))      + delim
         msg += str(int(round(self.number_integral_0.get_value()*1000*4))) + delim
-        msg += str(int(round(self.number_rate_0    .get_value()*100)))   + delim
+        msg += str(int(round(self.number_rate_0    .get_value()*100)))    + delim
         
         msg += str(int(self.number_setpoint_1      .get_value()*4))       + delim
         msg += str(int(round(self.number_band_1    .get_value()*4)))      + delim
         msg += str(int(round(self.number_integral_1.get_value()*1000*4))) + delim
-        msg += str(int(round(self.number_rate_1    .get_value()*100)))    + delim
+        msg += str(int(round(self.number_rate_1    .get_value()*100)))    
         
-        #print(msg)
+        # Write the message to the arduino
+        if(_debug): print('msg: %s' %msg)
         self.api.write(msg)
+        
+        # Write a single char to start the arduino's loop
+        self.api.write('a')
     
     def _set_channel_status(self, _status):
         if _status == 'Connected':
@@ -361,19 +379,31 @@ class temperature_controller(serial_gui_base):
             
     
     def _timer_tick(self):
+        
+        # Get the time
         t = _time.time()-self.t0
         
+        # Grab data packet fromt he serial line
         packet = self.api.read_all()
+        
+        # Split by the Serial.println() delimiter
         data = packet.split('\r\n')[:-1] 
-        if(_debug): print(data)
+        
+        # Print to console for debugging
+        if(_debug): 
+            print("Recovered Data: ")
+            print(data)
         
         try:
+            # Try to seperate the data
             T0, output0, proportional0, integral0, T1, output1, proportional1, integral1, Tsample = data
             
+            # Update temperature number boxes
             self.number_temperature_0     .set_value(float(T0))
             self.number_temperature_1     .set_value(float(T1))
             self.number_temperature_sample.set_value(float(Tsample))
         
+            # Update data plots
             self.plot_0.append_row([t, float(T0), float(output0), float(proportional0), float(integral0)], ckeys=['Time (s)', 'Temperature (C)', 'Output (%)', 'Proportional', 'Integral'])
             self.plot_0.plot()
             
@@ -382,15 +412,18 @@ class temperature_controller(serial_gui_base):
             
             self.plot_sample.append_row([t, float(Tsample)], ckeys=['Time (s)', 'Temperature (C)'])
             self.plot_sample.plot()
+            
+            # Print data packet status to console
+            if(_debug): print("Packet accepted!")
         except:
+            
+            # Print data packet status to console
+            if(_debug): print("Packet NOT accepted.")
             return
     
     def setup_gui_components(self, name, temperature_limit):
         # Remember the limit
         self._temperature_limit = temperature_limit
-
-        # Run the base class stuff, which shows the window at the end.
-        _serial_tools.serial_gui_base.__init__(self, api_class=arduino_api, name=name, show=False, window_size=[1000,800])
         
         self.window.set_size([0,0])
         
@@ -412,9 +445,7 @@ class temperature_controller(serial_gui_base):
         
         t01.add(_g.Label('Temperature:'), alignment=2).set_style('font-size: 15pt; font-weight: bold; color: white')
         self.number_temperature_0 = t01.add(_g.NumberBox(
-            -273.16, bounds=(-273.16, temperature_limit), suffix='°C',
-            signal_changed=self._send_parameters
-            )).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' )
+            -273.16, bounds=(-273.16, temperature_limit), suffix='°C')).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' ).disable()
         t01.new_autorow()
         
         t01.add(_g.Label('Setpoint:'), alignment=2).set_style('font-size: 15pt; font-weight: bold; color: cyan' )
@@ -461,9 +492,7 @@ class temperature_controller(serial_gui_base):
         
         t11.add(_g.Label('Temperature:'), alignment=2).set_style('font-size: 15pt; font-weight: bold; color: white')
         self.number_temperature_1 = t11.add(_g.NumberBox(
-            -273.16, bounds=(-273.16, temperature_limit), suffix='°C',
-            signal_changed=self._send_parameters
-            )).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' )
+            -273.16, bounds=(-273.16, temperature_limit), suffix='°C')).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' ).disable()
         t11.new_autorow()
         
         t11.add(_g.Label('Setpoint:'), alignment=2).set_style('font-size: 15pt; font-weight: bold; color: cyan' )
@@ -507,9 +536,7 @@ class temperature_controller(serial_gui_base):
         
         tS1.add(_g.Label('Sample Temperature:'), alignment=1).set_style('font-size: 15pt; font-weight: bold; color: white')
         self.number_temperature_sample = tS1.add(_g.NumberBox(
-            -273.16, bounds=(-273.16, temperature_limit), suffix='°C',
-            signal_changed=self._send_parameters
-            )).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' )
+            -273.16, bounds=(-273.16, temperature_limit), suffix='°C')).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' ).disable()
         
         
         # Make the Sample Channel plotter.
@@ -519,7 +546,7 @@ class temperature_controller(serial_gui_base):
             delimiter=',', show_logger=True), alignment=0, column_span=10)
 
         # Timer for collecting data
-        self.timer = _g.Timer(interval_ms=1000, single_shot=False)
+        self.timer = _g.Timer(interval_ms=500, single_shot=False)
         self.timer.signal_tick.connect(self._timer_tick)
 
         # Bottom log file controls
