@@ -1,25 +1,26 @@
-import mcphysics as _mp
 import numpy as _n
 import serial
-
-_debug_enabled = False
-_debug = _mp._debug
 
 class arduino_api():
     """
     Commands-only object for interacting with an Arduino
     temperature controller.
+    
     Parameters
     ----------
     port='COM3' : str
         Name of the port to connect to.
+        
     address=1 : int
         Address of the instrument. Can be 0-255, and must match the instrument
         setting.
+        
     baudrate=9600 : int
         Baud rate of the connection. Must match the instrument setting.
+        
     timeout=2000 : number
         How long to wait for responses before giving up (ms). Must be >300 for this instrument.
+        
     temperature_limit=450 : float
         Upper limit on the temperature setpoint (C).
     """
@@ -28,7 +29,7 @@ class arduino_api():
         self._temperature_limit = temperature_limit        
 
         # Check for installed libraries
-        if  not _mp._serial:
+        if  not serial:
             _s._warn('You need to install pyserial and to use the Arduino.')
             self.simulation_mode = True
 

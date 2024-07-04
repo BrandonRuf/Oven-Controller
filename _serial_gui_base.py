@@ -1,7 +1,5 @@
 import spinmob.egg   as _egg
-import spinmob       as _s
 import time          as _time
-
 
 from serial.tools.list_ports import comports as _comports
 _g            = _egg.gui
@@ -107,7 +105,7 @@ class serial_gui_base(_g.BaseObject):
         
         # Error
         self.grid_top.new_autorow()
-        self.label_message = self.grid_top.add(_g.Label(''), column_span=10).set_colors('pink' if _s.settings['dark_theme_qt'] else 'red')
+        self.label_message = self.grid_top.add(_g.Label(''), column_span=10).set_colors('pink')
         
         # By default the bottom grid is disabled
         self.grid_bot.disable()

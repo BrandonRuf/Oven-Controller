@@ -6,8 +6,8 @@ import serial        as _serial
 _g            = _egg.gui
 
 from serial.tools.list_ports import comports as _comports
-from _serial_gui_base import serial_gui_base
-from _arduino_api import arduino_api
+from _serial_gui_base  import serial_gui_base
+from _arduino_api      import arduino_api
 
 # GUI settings
 _s.settings['dark_theme_qt'] = True
@@ -18,15 +18,16 @@ _debug = True
 
 class temperature_controller(serial_gui_base):
     """
-    Graphical interface for the Auber SYL-53X2P temperature controller.
+    Graphical interface for the Dominic Ryan's Arduino based
+    temperature controller.
     
     Parameters
     ----------
-    name='auber_syl53x2p' : str
+    name='test' : str
         Unique name to give this instance, so that its settings will not
         collide with other egg objects.
         
-    temperature_limit=450 : float
+    temperature_limit=1000 : float
         Upper limit on the temperature setpoint (C).
     
     show=True : bool
@@ -35,7 +36,7 @@ class temperature_controller(serial_gui_base):
     block=False : bool
         Whether to block the console when showing the window.
         
-    window_size=[1,1] : list
+    window_size=[1,300] : list
         Dimensions of the window.
     """
     def __init__(self, name='test', temperature_limit=1000, show=True, block=False, window_size=[1,300]):
@@ -73,6 +74,10 @@ class temperature_controller(serial_gui_base):
             self.timer.stop()       
             
     def _send_parameters(self):
+        """
+        Sends the temperature control parameters to the arduino controller.
+
+        """
         delim = ','
         
         # Build up the message to send to the controller
@@ -95,6 +100,11 @@ class temperature_controller(serial_gui_base):
         self.api.write('a')
     
     def _set_channel_status(self, _status):
+        """
+        Updates the channel status (Connected or Disconnected) in the GUI.
+        
+        """
+        
         if _status == 'Connected':
             self.channel_0_status.set_text('(Connected)').set_style('font-size: 20pt; color: mediumspringgreen')
             self.channel_1_status.set_text('(Connected)').set_style('font-size: 20pt; color: mediumspringgreen')
@@ -104,6 +114,9 @@ class temperature_controller(serial_gui_base):
             
     
     def _timer_tick(self):
+        """
+        Called every time the timer ticks. Used for grabbing serial data and updating the GUI.
+        """
         
         # Get the time
         t = _time.time()-self.t0
@@ -147,6 +160,10 @@ class temperature_controller(serial_gui_base):
             return
     
     def setup_gui_components(self, name, temperature_limit):
+        """
+        Sets up the GUI layout (Numberboxes, Plotters, ect..)
+        """
+        
         # Remember the limit
         self._temperature_limit = temperature_limit
         
@@ -168,6 +185,7 @@ class temperature_controller(serial_gui_base):
         t03 = self.tab_channel_0.place_object(_g.GridLayout(margins=False), alignment=0, row=1,column=2)
         t04 = self.tab_channel_0.place_object(_g.GridLayout(margins=False), alignment=0, row=2, column = 0,column_span=10)
         
+        # Add relevant numberboxes for realtime channel 0 data
         t01.add(_g.Label('Temperature:'), alignment=2).set_style('font-size: 15pt; font-weight: bold; color: white')
         self.number_temperature_0 = t01.add(_g.NumberBox(
             -273.16, bounds=(-273.16, temperature_limit), suffix='°C')).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' ).disable()
@@ -215,6 +233,7 @@ class temperature_controller(serial_gui_base):
         t13 = self.tab_channel_1.place_object(_g.GridLayout(margins=False), alignment=0, row=1,column=2)
         t14 = self.tab_channel_1.place_object(_g.GridLayout(margins=False), alignment=0, row=2, column = 0,column_span=10)
         
+        # Add relevant numberboxes for realtime channel 1 data
         t11.add(_g.Label('Temperature:'), alignment=2).set_style('font-size: 15pt; font-weight: bold; color: white')
         self.number_temperature_1 = t11.add(_g.NumberBox(
             -273.16, bounds=(-273.16, temperature_limit), suffix='°C')).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' ).disable()
@@ -256,13 +275,14 @@ class temperature_controller(serial_gui_base):
             autosettings_path=name+'.plot',
             delimiter=',', show_logger=True), alignment=0, column_span=10)
         
+        # Sample channel tab segmentation
         tS1 = self.tab_channel_sample.place_object(_g.GridLayout(margins=False), alignment=0, row=0, column =0)
         tS2 = self.tab_channel_sample.place_object(_g.GridLayout(margins=False), alignment=0, row=1, column = 0,column_span=10)
         
+        # Add relevant numberboxe for realtime sample channel data
         tS1.add(_g.Label('Sample Temperature:'), alignment=1).set_style('font-size: 15pt; font-weight: bold; color: white')
         self.number_temperature_sample = tS1.add(_g.NumberBox(
             -273.16, bounds=(-273.16, temperature_limit), suffix='°C')).set_width(200).set_style('font-size: 15pt; font-weight: bold; color: white' ).disable()
-        
         
         # Make the Sample Channel plotter.
         self.plot_sample = tS2.add(_g.DataboxPlot(
@@ -279,5 +299,6 @@ class temperature_controller(serial_gui_base):
 
         return    
 
-
-self = temperature_controller('Dominic`s Controller')
+# Create an instance of the controller
+if __name__ == '__main__':
+    self = temperature_controller('Dominic`s Controller')
