@@ -1,2 +1,3 @@
 # Oven-Controller
-An Oven Controller for Dominic Ryan's Lab
+Graphical interface and serial API for
+Dominic Ryan's Arduino based temperature controller.
